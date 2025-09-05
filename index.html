@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Event Scanner</title>
 
@@ -8,12 +9,29 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2d7ef7" />
 
-  <!-- Your existing styles here -->
+  <!-- Favicon icons -->
+  <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="icon" href="icon-512.png" sizes="512x512" type="image/png" />
+
   <style>
-    /* ... your CSS styles from scannerPage() ... */
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background:#f7f7f7; }
+    .container { max-width: 560px; margin: 0 auto; }
+    #reader { width: 100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .status { margin-top: 16px; padding: 16px; border-radius: 8px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.06); min-height: 80px; }
+    .ok { color: #0b8457; font-weight: 700; }
+    .warn { color: #c0392b; font-weight: 700; }
+    .small { color:#666; font-size: 12px; margin-top: 8px; }
+    button { margin-top: 12px; padding: 10px 14px; border: 0; border-radius: 8px; background: #2d7ef7; color: #fff; font-weight: 600; cursor: pointer; }
+    button:disabled { background: #999; cursor: not-allowed; }
+    .guest-info { margin-top: 8px; font-size: 14px; color: #333; line-height: 1.4; }
+    .history { margin-top: 24px; background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); max-height: 200px; overflow-y: auto; }
+    .history h3 { margin-top: 0; font-weight: 600; }
+    .history-item { border-bottom: 1px solid #eee; padding: 6px 0; font-size: 14px; }
+    .history-item:last-child { border-bottom: none; }
+    .success-icon { color: #0b8457; margin-right: 6px; }
+    .error-icon { color: #c0392b; margin-right: 6px; }
   </style>
 
-  <!-- Service worker registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -24,10 +42,122 @@
     }
   </script>
 
-  <!-- Your existing scripts here -->
   <script src="https://unpkg.com/html5-qrcode" defer></script>
 </head>
 <body>
-  <!-- Your scanner page body HTML here -->
+  <div class="container">
+    <h2>Event QR Scanner</h2>
+    <div id="reader"></div>
+    <div id="result" class="status"></div>
+    <button id="pauseBtn">Pause Scanning</button>
+    <button id="clearHistoryBtn">Clear History</button>
+    <div class="small">Tip: If camera permission is blocked, enable it in your browser settings.</div>
+
+    <div class="history" id="history">
+      <h3>Scan History</h3>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+  <script>
+    let scanner;
+    let scanning = true;
+    const resultEl = document.getElementById('result');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    const historyList = document.getElementById('historyList');
+
+    function addHistoryItem(text, success) {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = (success ? '<span class="success-icon">✔️</span>' : '<span class="error-icon">❌</span>') + text;
+      historyList.prepend(div);
+    }
+
+    function showMessage(text, ok) {
+      resultEl.innerHTML = '<div class="' + (ok ? 'ok' : 'warn') + '">' + (ok ? 'Success' : 'Notice') + '</div><div class="guest-info">' + text + '</div>';
+    }
+
+    async function handleScannedText(text) {
+      if (!scanning) return;
+      try {
+        // Adjust this URL to your deployed web app URL
+        const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx9FGtFpoG5nqUQzquWjrrCY8BHdZ3Zhrf5J5b0v17AsZcPWGcMV736vcAslGrzuiRZ/exec';
+
+        if (text.startsWith(WEBAPP_URL)) {
+          const endpoint = text + "&format=json";
+          const resp = await fetch(endpoint, {method:'GET', credentials:'omit'});
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.name) {
+              const status = data.already ? "Already checked in" : "Checked in";
+              const timeStr = new Date(data.time).toLocaleString();
+              const message = `${status}<br/>👤 ${data.name}<br/>🕒 ${timeStr}`;
+              showMessage(message, !data.already);
+              addHistoryItem(message, !data.already);
+            } else {
+              showMessage(data.error || "Check-in failed.", false);
+              addHistoryItem(data.error || "Check-in failed.", false);
+            }
+          } else {
+            showMessage("Server error.", false);
+            addHistoryItem("Server error.", false);
+          }
+        } else {
+          showMessage("Unrecognized QR content.", false);
+          addHistoryItem("Unrecognized QR content.", false);
+        }
+      } catch (e) {
+        console.error(e);
+        showMessage("Network error.", false);
+        addHistoryItem("Network error.", false);
+      }
+    }
+
+    async function startScanner() {
+      const config = { fps: 10, qrbox: 250 };
+      scanner = new Html5Qrcode("reader");
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => { handleScannedText(decodedText); },
+          (_) => {}
+        );
+        scanning = true;
+        pauseBtn.textContent = 'Pause Scanning';
+        pauseBtn.disabled = false;
+      } catch (err) {
+        console.error(err);
+        showMessage('Camera start failed: ' + String(err), false);
+        pauseBtn.disabled = true;
+      }
+    }
+
+    async function stopScanner() {
+      if (scanner) {
+        await scanner.stop();
+        scanning = false;
+        pauseBtn.textContent = 'Resume Scanning';
+      }
+    }
+
+    pauseBtn.addEventListener('click', async () => {
+      if (scanning) {
+        await stopScanner();
+      } else {
+        await startScanner();
+      }
+    });
+
+    clearHistoryBtn.addEventListener('click', () => {
+      historyList.innerHTML = '';
+      showMessage('Scan history cleared.', true);
+    });
+
+    window.addEventListener('load', () => {
+      startScanner();
+    });
+  </script>
 </body>
 </html>
