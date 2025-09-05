@@ -1,7 +1,7 @@
 {
   "name": "Event QR Scanner",
   "short_name": "Scanner",
-  "start_url": "/?view=scanner",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f7f7f7",
   "theme_color": "#2d7ef7",
