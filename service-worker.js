@@ -1,10 +1,12 @@
 const CACHE_NAME = 'event-scanner-cache-v1';
 const urlsToCache = [
   '/',
-  '/?view=scanner',
-  '/manifest.json',
-  'https://unpkg.com/html5-qrcode',  // external library
-  // Add any other assets you want cached here
+  'index.html',
+  'manifest.json',
+  'service-worker.js',
+  'icon-192.png',
+  'icon-512.png',
+  'https://unpkg.com/html5-qrcode'
 ];
 
 self.addEventListener('install', event => {
