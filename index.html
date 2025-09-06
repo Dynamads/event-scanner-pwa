@@ -53,110 +53,192 @@
   <audio id="errorSound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
 
   <script>
-    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzCux8_QKBE37_m8qDS8CIaDlJYOTlnaCL4OY0QzOYD0RRCExUCb92L-W_TUMH1qN5E/exec';
+  const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzCux8_QKBE37_m8qDS8CIaDlJYOTlnaCL4OY0QzOYD0RRCExUCb92L-W_TUMH1qN5E/exec';
 
-    let scanner;
-    let scanning = true;
-    const resultEl = document.getElementById('result');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-    const historyList = document.getElementById('historyList');
+  let scanner;
+  let scanning = true;
+  const resultEl = document.getElementById('result');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+  const historyList = document.getElementById('historyList');
 
-    function addHistoryItem(text, success) {
-      const div = document.createElement('div');
-      div.className = 'history-item';
-      div.innerHTML = (success ? '<span class="success-icon">✔️</span>' : '<span class="error-icon">❌</span>') + text;
-      historyList.prepend(div);
+  function addHistoryItem(text, success) {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.innerHTML = (success ? '<span class="success-icon">✔️</span>' : '<span class="error-icon">❌</span>') + text;
+    historyList.prepend(div);
+  }
+
+  function showMessage(text, ok) {
+    // Big bold icons for visual feedback
+    let icon = ok ? '✔️' : '❌';
+    let cls = ok ? 'ok' : 'warn';
+    
+    resultEl.innerHTML = `
+      <div class="${cls}" style="font-size: 48px; font-weight: bold; margin-bottom: 8px;">${icon}</div>
+      <div class="guest-info">${text}</div>
+    `;
+
+    // Keep message visible for 2 seconds before clearing
+    setTimeout(() => {
+      if (scanning) {
+        resultEl.innerHTML = '<div class="guest-info">Ready to scan...</div>';
+      }
+    }, 2000);
+  }
+
+  function playSuccessSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note - happy beep
+      gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.25); // 250ms beep
+    } catch (err) {
+      console.warn('Success sound failed:', err);
     }
+  }
 
-    function showMessage(text, ok) {
-      resultEl.innerHTML = '<div class="' + (ok ? 'ok' : 'warn') + '">' + (ok ? 'Success' : 'Notice') + '</div><div class="guest-info">' + text + '</div>';
+  function playErrorSound() {
+    try {
+      // Try to play the audio element first
+      const errorAudio = document.getElementById('errorSound');
+      if (errorAudio) {
+        errorAudio.play().catch(() => {
+          // Fallback to generated sound if audio element fails
+          generateErrorSound();
+        });
+      } else {
+        generateErrorSound();
+      }
+    } catch (err) {
+      generateErrorSound();
     }
+  }
 
-    async function handleScannedText(text) {
-      console.log('Scanned text:', text);
-      if (!scanning) return;
-      try {
-        if (text.startsWith(WEBAPP_URL)) {
-          if (navigator.vibrate) navigator.vibrate(200);  // Vibrate on success
+  function generateErrorSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
 
-          const endpoint = text + "&format=json";
-          const resp = await fetch(endpoint, {method:'GET', credentials:'omit'});
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.name) {
-              const status = data.already ? "Already checked in" : "Checked in";
-              const timeStr = new Date(data.time).toLocaleString();
-              const message = `${status}<br/>👤 ${data.name}<br/>🕒 ${timeStr}`;
-              showMessage(message, !data.already);
-              addHistoryItem(message, !data.already);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'square';
+      oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note - error beep
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.2); // 200ms beep
+    } catch (err) {
+      console.warn('Error sound generation failed:', err);
+    }
+  }
+
+  async function handleScannedText(text) {
+    console.log('Scanned text:', text);
+    if (!scanning) return;
+    try {
+      if (text.startsWith(WEBAPP_URL)) {
+        const endpoint = text + "&format=json";
+        const resp = await fetch(endpoint, {method:'GET', credentials:'omit'});
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.name) {
+            const status = data.already ? "Already checked in" : "Checked in";
+            const timeStr = new Date(data.time).toLocaleString();
+            const message = `${status}<br/>👤 ${data.name}<br/>🕒 ${timeStr}`;
+            
+            showMessage(message, !data.already);
+            addHistoryItem(message, !data.already);
+
+            // Vibrate feedback
+            if (navigator.vibrate) navigator.vibrate(200);
+
+            // Sound feedback: success beep only for NEW check-ins
+            if (!data.already) {
+              playSuccessSound();  // ✅ New check-in
             } else {
-              showMessage(data.error || "Check-in failed.", false);
-              addHistoryItem(data.error || "Check-in failed.", false);
-              document.getElementById('errorSound').play();  // Play error sound
+              playErrorSound();    // ❌ Already checked in
             }
           } else {
-            showMessage("Server error.", false);
-            addHistoryItem("Server error.", false);
-            document.getElementById('errorSound').play();  // Play error sound
+            showMessage(data.error || "Check-in failed.", false);
+            addHistoryItem(data.error || "Check-in failed.", false);
+            playErrorSound();
           }
         } else {
-          showMessage("Unrecognized QR content.", false);
-          addHistoryItem("Unrecognized QR content.", false);
-          document.getElementById('errorSound').play();  // Play error sound
+          showMessage("Server error.", false);
+          addHistoryItem("Server error.", false);
+          playErrorSound();
         }
-      } catch (e) {
-        console.error(e);
-        showMessage("Network error.", false);
-        addHistoryItem("Network error.", false);
-        document.getElementById('errorSound').play();  // Play error sound
-      }
-    }
-
-    async function startScanner() {
-      const config = { fps: 10, qrbox: 250 };
-      scanner = new Html5Qrcode("reader");
-      try {
-        await scanner.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText) => { handleScannedText(decodedText); },
-          (_) => {}
-        );
-        scanning = true;
-        pauseBtn.textContent = 'Pause Scanning';
-        pauseBtn.disabled = false;
-      } catch (err) {
-        console.error(err);
-        showMessage('Camera start failed: ' + String(err), false);
-        pauseBtn.disabled = true;
-      }
-    }
-
-    async function stopScanner() {
-      if (scanner) {
-        await scanner.stop();
-        scanning = false;
-        pauseBtn.textContent = 'Resume Scanning';
-      }
-    }
-
-    pauseBtn.addEventListener('click', async () => {
-      if (scanning) {
-        await stopScanner();
       } else {
-        await startScanner();
+        showMessage("Unrecognized QR content.", false);
+        addHistoryItem("Unrecognized QR content.", false);
+        playErrorSound();
       }
-    });
+    } catch (e) {
+      console.error(e);
+      showMessage("Network error.", false);
+      addHistoryItem("Network error.", false);
+      playErrorSound();
+    }
+  }
 
-    clearHistoryBtn.addEventListener('click', () => {
-      historyList.innerHTML = '';
-      showMessage('Scan history cleared.', true);
-    });
+  async function startScanner() {
+    const config = { fps: 10, qrbox: 250 };
+    scanner = new Html5Qrcode("reader");
+    try {
+      await scanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => { handleScannedText(decodedText); },
+        (_) => {}
+      );
+      scanning = true;
+      pauseBtn.textContent = 'Pause Scanning';
+      pauseBtn.disabled = false;
+      showMessage('Scanner ready. Point camera at QR code.', true);
+    } catch (err) {
+      console.error(err);
+      showMessage('Camera start failed: ' + String(err), false);
+      pauseBtn.disabled = true;
+    }
+  }
 
-    window.addEventListener('load', () => {
-      startScanner();
-    });
-  </script>
+  async function stopScanner() {
+    if (scanner) {
+      await scanner.stop();
+      scanning = false;
+      pauseBtn.textContent = 'Resume Scanning';
+      resultEl.innerHTML = '<div class="guest-info">Scanner paused</div>';
+    }
+  }
+
+  pauseBtn.addEventListener('click', async () => {
+    if (scanning) {
+      await stopScanner();
+    } else {
+      await startScanner();
+    }
+  });
+
+  clearHistoryBtn.addEventListener('click', () => {
+    historyList.innerHTML = '';
+    showMessage('Scan history cleared.', true);
+  });
+
+  window.addEventListener('load', () => {
+    startScanner();
+  });
+</script>
 </body>
 </html>
