@@ -45,3 +45,5 @@ function onOpen() {
     .addItem('Reset Check-ins (ALL TABS)', 'resetCheckinsAllTabs')
     .addToUi();
 }
+
+to open terminal: oladoyinfaturoti@Oladoyins-MacBook-Air scanner files % 
