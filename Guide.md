@@ -46,4 +46,4 @@ function onOpen() {
     .addToUi();
 }
 
-to open terminal: oladoyinfaturoti@Oladoyins-MacBook-Air scanner files % 
+Note: to open terminal: oladoyinfaturoti@Oladoyins-MacBook-Air scanner files % 
