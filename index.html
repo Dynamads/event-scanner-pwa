@@ -58,8 +58,10 @@
 
   let scanner;
   let scanning = true;
+  let lastScanTime = 0;
+  const SCAN_COOLDOWN = 3000; // 3 seconds cooldown between scans
+  
   const resultEl = document.getElementById('result');
-  const pauseBtn = document.getElementById('pauseBtn');
   const clearHistoryBtn = document.getElementById('clearHistoryBtn');
   const historyList = document.getElementById('historyList');
 
@@ -148,6 +150,14 @@
   async function handleScannedText(text) {
     console.log('Scanned text:', text);
     if (!scanning) return;
+
+    // COOLDOWN LOGIC: Prevent multiple scans in short time
+    const now = Date.now();
+    if (now - lastScanTime < SCAN_COOLDOWN) {
+      return; // ignore rapid duplicates
+    }
+    lastScanTime = now;
+
     try {
       if (text.startsWith(WEBAPP_URL)) {
         const endpoint = text + "&format=json";
@@ -205,32 +215,12 @@
         (_) => {}
       );
       scanning = true;
-      pauseBtn.textContent = 'Pause Scanning';
-      pauseBtn.disabled = false;
       showMessage('Scanner ready. Point camera at QR code.', true);
     } catch (err) {
       console.error(err);
       showMessage('Camera start failed: ' + String(err), false);
-      pauseBtn.disabled = true;
     }
   }
-
-  async function stopScanner() {
-    if (scanner) {
-      await scanner.stop();
-      scanning = false;
-      pauseBtn.textContent = 'Resume Scanning';
-      resultEl.innerHTML = '<div class="guest-info">Scanner paused</div>';
-    }
-  }
-
-  pauseBtn.addEventListener('click', async () => {
-    if (scanning) {
-      await stopScanner();
-    } else {
-      await startScanner();
-    }
-  });
 
   clearHistoryBtn.addEventListener('click', () => {
     historyList.innerHTML = '';
