@@ -119,7 +119,7 @@ git status
 git add -A
 
 # Commit with message
-git commit -m "Commit message"
+git commit -m "Commit message" //commit message fescribes the changes made
 
 # Sync with remote before push
 git pull origin main --rebase
